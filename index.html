@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Monitoramento Térmico</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { overflow-y: auto; }
+        @media (min-width: 1024px) {
+            body { overflow: hidden; }
+            .main-container { height: calc(100vh - 4rem); }
+        }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #020617; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen selection:bg-blue-500/30">
+
+    <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800/60 min-h-16 sticky top-0 z-50 py-2 md:py-0">
+        <div class="max-w-[1600px] mx-auto px-4 md:px-6 h-full flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3 w-full sm:w-auto">
+                <div class="bg-gradient-to-br from-blue-500 to-indigo-600 text-white p-2 rounded-xl shadow-lg shadow-blue-500/20 shrink-0">
+                    <i class="fa-solid fa-temperature-half text-base md:text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm md:text-lg font-bold text-white tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Câmara Fria</h1>
+                    <p class="text-[9px] md:text-[10px] text-slate-400 font-medium tracking-wider uppercase">CDD Araçatuba - DPO 2.0</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between sm:justify-end gap-1.5 md:gap-2 bg-slate-900/50 backdrop-blur-sm p-1 md:p-1.5 px-2 md:px-3 rounded-xl border border-slate-800 w-full sm:w-auto overflow-x-auto">
+                <label class="text-[10px] md:text-xs font-semibold text-slate-400 whitespace-nowrap hidden lg:inline">
+                    <i class="fa-solid fa-filter mr-1 text-blue-500"></i> Filtrar:
+                </label>
+                <select id="monthFilter" onchange="handleMonthChange()" class="bg-slate-950 border border-slate-800 text-white text-[10px] md:text-xs rounded-lg p-1 md:p-1.5 outline-none cursor-pointer flex-1 sm:flex-none min-w-[75px]"></select>
+                <select id="weekFilter" onchange="handleWeekChange()" class="bg-slate-950 border border-slate-800 text-white text-[10px] md:text-xs rounded-lg p-1 md:p-1.5 outline-none cursor-pointer flex-1 sm:flex-none min-w-[70px]"></select>
+                <select id="dateFilter" onchange="applyFilters()" class="bg-slate-950 border border-slate-800 text-white text-[10px] md:text-xs rounded-lg p-1 md:p-1.5 outline-none cursor-pointer flex-1 sm:flex-none min-w-[70px]"></select>
+                <button onclick="clearFilters()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 p-1 md:p-1.5 px-2 rounded-lg text-[10px] md:text-xs transition-all cursor-pointer flex items-center gap-1 shrink-0">
+                    <i class="fa-solid fa-trash-can text-rose-400"></i> <span class="hidden md:inline">Limpar</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto p-3 md:p-4 main-container flex flex-col gap-4 box-border lg:justify-between h-auto lg:h-[calc(100vh-4rem)]">
+        
+        <section class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4 shrink-0">
+            <div class="bg-slate-900/50 backdrop-blur-md p-3 md:p-4 rounded-xl border border-slate-800/80 flex items-center justify-between shadow-lg">
+                <div class="space-y-0.5">
+                    <span class="text-[9px] md:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Média do Ano</span>
+                    <h3 id="kpiAvgAno" class="text-lg md:text-xl font-bold text-cyan-400 tracking-tight">--°C</h3>
+                    <p class="text-[9px] text-slate-500 font-medium">Ano Corrente</p>
+                </div>
+                <div class="bg-gradient-to-br from-cyan-500/15 to-transparent text-cyan-400 p-2.5 rounded-xl text-xs md:text-sm border border-cyan-500/10"><i class="fa-solid fa-earth-americas"></i></div>
+            </div>
+            <div class="bg-slate-900/50 backdrop-blur-md p-3 md:p-4 rounded-xl border border-slate-800/80 flex items-center justify-between shadow-lg">
+                <div class="space-y-0.5">
+                    <span class="text-[9px] md:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Média do Mês</span>
+                    <h3 id="kpiAvgMes" class="text-lg md:text-xl font-bold text-blue-400 tracking-tight">--°C</h3>
+                    <p class="text-[9px] text-slate-500 font-medium" id="kpiAvgMesSub">Mês Selecionado</p>
+                </div>
+                <div class="bg-gradient-to-br from-blue-500/15 to-transparent text-blue-400 p-2.5 rounded-xl text-xs md:text-sm border border-blue-500/10"><i class="fa-solid fa-calendar"></i></div>
+            </div>
+            <div class="bg-slate-900/50 backdrop-blur-md p-3 md:p-4 rounded-xl border border-slate-800/80 flex items-center justify-between shadow-lg">
+                <div class="space-y-0.5">
+                    <span class="text-[9px] md:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Média do Filtro</span>
+                    <h3 id="kpiAvgDia" class="text-lg md:text-xl font-bold text-emerald-400 tracking-tight">--°C</h3>
+                    <p id="kpiAvgDiaSub" class="text-[9px] text-slate-500 font-medium">Filtro Atual</p>
+                </div>
+                <div class="bg-gradient-to-br from-emerald-500/15 to-transparent text-emerald-400 p-2.5 rounded-xl text-xs md:text-sm border border-emerald-500/10"><i class="fa-solid fa-clock"></i></div>
+            </div>
+            <div class="bg-slate-900/50 backdrop-blur-md p-3 md:p-4 rounded-xl border border-slate-800/80 flex items-center justify-between shadow-lg">
+                <div class="space-y-0.5">
+                    <span class="text-[9px] md:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Pico Máximo</span>
+                    <h3 id="kpiMax" class="text-lg md:text-xl font-bold text-rose-400 tracking-tight">--°C</h3>
+                    <p id="kpiMaxTime" class="text-[9px] text-slate-500 font-mono">--:--</p>
+                </div>
+                <div class="bg-gradient-to-br from-rose-500/15 to-transparent text-rose-400 p-2.5 rounded-xl text-xs md:text-sm border border-rose-500/10"><i class="fa-solid fa-temperature-arrow-up"></i></div>
+            </div>
+            <div class="bg-slate-900/50 backdrop-blur-md p-3 md:p-4 rounded-xl border border-slate-800/80 flex items-center justify-between shadow-lg sm:col-span-2 md:col-span-1">
+                <div class="space-y-0.5">
+                    <span class="text-[9px] md:text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Pico Mínimo</span>
+                    <h3 id="kpiMin" class="text-lg md:text-xl font-bold text-sky-400 tracking-tight">--°C</h3>
+                    <p id="kpiMinTime" class="text-[9px] text-slate-500 font-mono">--:--</p>
+                </div>
+                <div class="bg-gradient-to-br from-sky-500/15 to-transparent text-sky-400 p-2.5 rounded-xl text-xs md:text-sm border border-sky-500/10"><i class="fa-solid fa-temperature-arrow-down"></i></div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+            <div class="bg-slate-900/50 backdrop-blur-md p-4 rounded-xl border border-slate-800 flex flex-col justify-between lg:col-span-2 min-h-[300px] lg:min-h-0 shadow-lg">
+                <div class="flex items-center justify-between mb-2 shrink-0">
+                    <div>
+                        <h3 id="chartTitle" class="text-xs md:text-sm font-bold text-white tracking-wide">Curva de Tendência Térmica</h3>
+                    </div>
+                </div>
+                <div class="relative w-full flex-1 h-[250px] lg:h-full min-h-0">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/50 backdrop-blur-md p-4 rounded-xl border border-slate-800 flex flex-col min-h-[200px] lg:min-h-0 shadow-lg">
+                <div class="flex items-center gap-2 mb-2 shrink-0">
+                    <span class="flex h-2 w-2 relative">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                    <h3 class="text-xs md:text-sm font-bold text-white tracking-wide">Análise de Detalhes</h3>
+                </div>
+                <hr class="border-slate-800/60 my-2 shrink-0">
+                <div id="analysisText" class="text-slate-300 text-xs leading-relaxed space-y-2.5 overflow-y-auto pr-1 flex-1"></div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-4 h-auto lg:h-44 shrink-0">
+            <div class="bg-slate-900/50 backdrop-blur-md rounded-xl border border-slate-800 overflow-hidden flex flex-col lg:col-span-2 min-h-[200px] lg:min-h-0 shadow-xl">
+                <div class="px-4 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between shrink-0">
+                    <h3 class="text-xs font-bold text-white tracking-wide">Auditoria de Leituras</h3>
+                    <span class="text-[10px] text-slate-400 font-mono bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800" id="tableCount">-- registros</span>
+                </div>
+                <div class="overflow-y-auto flex-1 text-[11px] md:text-xs">
+                    <table class="w-full text-left text-slate-400">
+                        <thead class="text-[9px] md:text-[10px] text-slate-300 uppercase bg-slate-950/80 sticky top-0 border-b border-slate-800 z-10">
+                            <tr>
+                                <th scope="col" class="px-4 py-1.5 font-semibold">Data</th>
+                                <th scope="col" class="px-4 py-1.5 font-semibold">Hora</th>
+                                <th scope="col" class="px-4 py-1.5 font-semibold">Temp</th>
+                                <th scope="col" class="px-4 py-1.5 font-semibold">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody" class="divide-y divide-slate-800/20"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/50 backdrop-blur-md rounded-xl border border-slate-800 overflow-hidden flex flex-col min-h-[180px] lg:min-h-0 shadow-xl">
+                <div class="px-4 py-2 border-b border-slate-800 bg-slate-900/80 shrink-0">
+                    <h3 class="text-xs font-bold text-white tracking-wide"><i class="fa-solid fa-clock-rotate-left mr-1.5 text-indigo-400"></i>Métricas por Turno</h3>
+                </div>
+                <div class="p-3 flex flex-col justify-between flex-1 text-[11px] gap-1.5">
+                    <div class="bg-slate-950/40 p-2 px-2.5 rounded-lg border border-slate-800/60 flex items-center justify-between gap-2">
+                        <span class="text-slate-300 font-bold text-xs shrink-0">Turno A</span>
+                        <div class="flex gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+                            <span>Med: <strong class="text-slate-200" id="shiftA_Avg">--</strong></span>
+                            <span>Mín: <strong class="text-sky-400" id="shiftA_Min">--</strong></span>
+                            <span>Máx: <strong class="text-rose-400" id="shiftA_Max">--</strong></span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-950/40 p-2 px-2.5 rounded-lg border border-slate-800/60 flex items-center justify-between gap-2">
+                        <span class="text-slate-300 font-bold text-xs shrink-0">Turno B</span>
+                        <div class="flex gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+                            <span>Med: <strong class="text-slate-200" id="shiftB_Avg">--</strong></span>
+                            <span>Mín: <strong class="text-sky-400" id="shiftB_Min">--</strong></span>
+                            <span>Máx: <strong class="text-rose-400" id="shiftB_Max">--</strong></span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-950/40 p-2 px-2.5 rounded-lg border border-slate-800/60 flex items-center justify-between gap-2">
+                        <span class="text-slate-300 font-bold text-xs shrink-0">Turno C</span>
+                        <div class="flex gap-2 sm:gap-3 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+                            <span>Med: <strong class="text-slate-200" id="shiftC_Avg">--</strong></span>
+                            <span>Mín: <strong class="text-sky-400" id="shiftC_Min">--</strong></span>
+                            <span>Máx: <strong class="text-rose-400" id="shiftC_Max">--</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const SUPABASE_URL = 'https://ioulxeqlkzfnhqkonndj.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvdWx4ZXFsa3pmbmhxa29ubmRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1MjY1MTIsImV4cCI6MjEwMDEwMjUxMn0.w0DTTgkPPJwUmf_byOD8pbD6sOCRbPZP3asJy29XzBU';
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let dataset = [];
+        let chartInstance = null;
+        const monthNames = {
+            "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril", "05": "Maio", "06": "Junho",
+            "07": "Julho", "08": "Agosto", "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro"
+        };
+
+        window.onload = function() {
+            fetchSupabaseData();
+        };
+
+        async function fetchSupabaseData() {
+            try {
+                const { data, error } = await _supabase
+                    .from('monitoramento_termico')
+                    .select('data, hora, temp')
+                    .order('data', { ascending: true })
+                    .order('hora', { ascending: true });
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    dataset = data;
+                    buildMonthFilter();
+                    handleMonthChange();
+                } else {
+                    document.getElementById('analysisText').innerHTML = `<p class="text-slate-500">Nenhum dado encontrado no banco de dados.</p>`;
+                }
+            } catch (err) {
+                console.error("Erro ao carregar dados do Supabase:", err);
+                document.getElementById('analysisText').innerHTML = `<p class="text-rose-400">Erro ao carregar dados do banco.</p>`;
+            }
+        }
+
+        function getWeekNumber(dateString) {
+            if (!dateString) return 0;
+            const date = new Date(dateString + 'T00:00:00');
+            const dayNum = date.getUTCDay() || 7;
+            date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+            return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+        }
+
+        function buildMonthFilter() {
+            const monthSelect = document.getElementById('monthFilter');
+            const uniqueMonths = [...new Set(dataset.map(item => item.data.substring(0, 7)))].sort();
+            
+            let options = `<option value="all_months">Todos os Meses</option>`;
+            options += uniqueMonths.map(ym => {
+                const [year, month] = ym.split('-');
+                return `<option value="${ym}">${monthNames[month] || month} de ${year}</option>`;
+            }).join('');
+
+            monthSelect.innerHTML = options;
+        }
+
+        function handleMonthChange() {
+            const selectedMonth = document.getElementById('monthFilter').value;
+            const weekSelect = document.getElementById('weekFilter');
+            const dateSelect = document.getElementById('dateFilter');
+
+            if (selectedMonth === 'all_months') {
+                weekSelect.innerHTML = `<option value="all_month">Semana - Todos</option>`;
+                dateSelect.innerHTML = `<option value="all_filter">Dia - Todos</option>`;
+                weekSelect.disabled = true;
+                dateSelect.disabled = true;
+                applyFilters();
+                return;
+            }
+
+            weekSelect.disabled = false;
+            dateSelect.disabled = false;
+
+            const monthData = dataset.filter(item => item.data.startsWith(selectedMonth));
+            const uniqueWeeks = [...new Set(monthData.map(item => getWeekNumber(item.data)))].sort((a,b)=>a-b);
+
+            let htmlOptions = `<option value="all_month">Mês Inteiro</option>`;
+            uniqueWeeks.forEach((week, index) => { htmlOptions += `<option value="${week}">Semana ${index + 1}</option>`; });
+            weekSelect.innerHTML = htmlOptions;
+            handleWeekChange();
+        }
+
+        function handleWeekChange() {
+            const selectedMonth = document.getElementById('monthFilter').value;
+            const selectedWeek = document.getElementById('weekFilter').value;
+            const dateSelect = document.getElementById('dateFilter');
+
+            if (selectedMonth === 'all_months') return;
+
+            let filteredByWeek = dataset.filter(item => item.data.startsWith(selectedMonth));
+            if (selectedWeek !== 'all_month') {
+                filteredByWeek = filteredByWeek.filter(item => getWeekNumber(item.data) === parseInt(selectedWeek, 10));
+            }
+            const uniqueDays = [...new Set(filteredByWeek.map(item => item.data))].sort();
+
+            let htmlOptions = `<option value="all_filter">Todo o Período</option>`;
+            uniqueDays.forEach(day => { htmlOptions += `<option value="${day}">Dia ${formatDate(day)}</option>`; });
+            dateSelect.innerHTML = htmlOptions;
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const selectedMonth = document.getElementById('monthFilter').value;
+            const selectedWeek = document.getElementById('weekFilter').value;
+            const selectedDate = document.getElementById('dateFilter').value;
+            
+            let filteredData = dataset;
+
+            if (selectedMonth !== 'all_months') {
+                filteredData = filteredData.filter(item => {
+                    const matchMonth = item.data.startsWith(selectedMonth);
+                    const matchWeek = selectedWeek === 'all_month' || getWeekNumber(item.data) === parseInt(selectedWeek, 10);
+                    const matchDate = selectedDate === 'all_filter' || item.data === selectedDate;
+                    return matchMonth && matchWeek && matchDate;
+                });
+            }
+
+            updateKPIs(filteredData, selectedMonth, selectedDate);
+            updateChart(filteredData, selectedMonth, selectedDate);
+            updateTable(filteredData);
+            generateAnalysis(filteredData, selectedMonth, selectedWeek, selectedDate);
+            calculateShiftMetrics(filteredData);
+        }
+
+        function clearFilters() {
+            const monthSelect = document.getElementById('monthFilter');
+            if (monthSelect.options.length > 0) monthSelect.selectedIndex = 0;
+            handleMonthChange();
+        }
+
+        function updateKPIs(data, selectedMonth, selectedDate) {
+            if (!data || data.length === 0) {
+                document.getElementById('kpiAvgDia').innerText = '--°C';
+                document.getElementById('kpiMax').innerText = '--°C';
+                document.getElementById('kpiMaxTime').innerText = '--:--';
+                document.getElementById('kpiMin').innerText = '--°C';
+                document.getElementById('kpiMinTime').innerText = '--:--';
+                return;
+            }
+
+            const yearSum = dataset.reduce((acc, curr) => acc + curr.temp, 0);
+            document.getElementById('kpiAvgAno').innerText = `${(yearSum / (dataset.length || 1)).toFixed(1)}°C`;
+
+            if (selectedMonth === 'all_months') {
+                document.getElementById('kpiAvgMes').innerText = `${(yearSum / (dataset.length || 1)).toFixed(1)}°C`;
+                document.getElementById('kpiAvgMesSub').innerText = 'Visão Geral (Todos)';
+            } else {
+                const monthData = dataset.filter(item => item.data.startsWith(selectedMonth));
+                const monthSum = monthData.reduce((acc, curr) => acc + curr.temp, 0);
+                document.getElementById('kpiAvgMes').innerText = `${(monthSum / (monthData.length || 1)).toFixed(1)}°C`;
+                document.getElementById('kpiAvgMesSub').innerText = 'Mês Selecionado';
+            }
+
+            let maxObj = data[0]; let minObj = data[0]; let filterSum = 0;
+            data.forEach(item => {
+                if(item.temp > maxObj.temp) maxObj = item;
+                if(item.temp < minObj.temp) minObj = item;
+                filterSum += item.temp;
+            });
+
+            const filterAvg = (filterSum / data.length).toFixed(1);
+            document.getElementById('kpiAvgDia').innerText = `${filterAvg}°C`;
+            
+            if (selectedMonth === 'all_months') {
+                document.getElementById('kpiAvgDiaSub').innerText = "Todos os Meses";
+            } else {
+                document.getElementById('kpiAvgDiaSub').innerText = selectedDate === 'all_filter' ? "Escopo do filtro ativo" : `Dia ${formatDate(selectedDate)}`;
+            }
+
+            document.getElementById('kpiMax').innerText = `${maxObj.temp.toFixed(1)}°C`;
+            document.getElementById('kpiMaxTime').innerText = `${formatDate(maxObj.data)} - ${maxObj.hora ? maxObj.hora.substring(0,5) : '--:--'}h`;
+
+            document.getElementById('kpiMin').innerText = `${minObj.temp.toFixed(1)}°C`;
+            document.getElementById('kpiMinTime').innerText = `${formatDate(minObj.data)} - ${minObj.hora ? minObj.hora.substring(0,5) : '--:--'}h`;
+        }
+
+        function updateChart(data, selectedMonth, selectedDate) {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            if (chartInstance) { chartInstance.destroy(); }
+
+            if (!data || data.length === 0) return;
+
+            let labels = []; 
+            let temperatures = [];
+            const isMobile = window.innerWidth < 768;
+
+            if (selectedMonth === 'all_months') {
+                // Agrupamento por Mês
+                const monthlyData = {};
+                data.forEach(item => {
+                    const monthKey = item.data.substring(0, 7);
+                    if (!monthlyData[monthKey]) { monthlyData[monthKey] = { sum: 0, count: 0 }; }
+                    monthlyData[monthKey].sum += item.temp;
+                    monthlyData[monthKey].count++;
+                });
+
+                labels = Object.keys(monthlyData).map(ym => {
+                    const [y, m] = ym.split('-');
+                    return `${monthNames[m] || m}/${y.substring(2)}`;
+                });
+                temperatures = Object.keys(monthlyData).map(ym => monthlyData[ym].sum / monthlyData[ym].count);
+                document.getElementById('chartTitle').innerText = `Comparativo Mensal (Média de Cada Mês)`;
+            } else if (selectedDate === 'all_filter') {
+                // Agrupamento por Dia
+                const dailyData = {};
+                data.forEach(item => {
+                    if (!dailyData[item.data]) { dailyData[item.data] = { sum: 0, count: 0 }; }
+                    dailyData[item.data].sum += item.temp;
+                    dailyData[item.data].count++;
+                });
+                labels = Object.keys(dailyData).map(date => formatDate(date));
+                temperatures = Object.keys(dailyData).map(date => dailyData[date].sum / dailyData[date].count);
+                document.getElementById('chartTitle').innerText = `Tendência do Período (Média/Dia)`;
+            } else {
+                // Leituras individuais por Hora
+                labels = data.map(item => item.hora ? item.hora.substring(0,5) : '--:--');
+                temperatures = data.map(item => item.temp);
+                document.getElementById('chartTitle').innerText = `Histórico Térmico - Dia ${formatDate(selectedDate)}`;
+            }
+
+            const idealLine = Array(temperatures.length).fill(7.0);
+            const attentionLine = Array(temperatures.length).fill(10.0);
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Temperatura (℃)',
+                            data: temperatures,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.02)',
+                            borderWidth: 2.5,
+                            fill: true,
+                            tension: 0.2,
+                            pointBackgroundColor: temperatures.map(t => t > 10.0 ? '#f43f5e' : t > 7.0 ? '#f59e0b' : '#3b82f6'),
+                            pointBorderColor: temperatures.map(t => t > 10.0 ? '#f43f5e' : t > 7.0 ? '#f59e0b' : '#3b82f6'),
+                            pointRadius: temperatures.map(t => t > 10.0 ? (isMobile ? 3 : 5) : (isMobile ? 2 : 4))
+                        },
+                        { label: 'Ideal (< 7°C)', data: idealLine, borderColor: '#10b981', borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, fill: false },
+                        { label: 'Atenção (> 10°C)', data: attentionLine, borderColor: '#f59e0b', borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { color: '#94a3b8', boxWidth: 8, font: { size: 9, weight: 'bold' } } }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: isMobile ? 8 : 12 } },
+                        y: { grid: { color: 'rgba(30, 41, 59, 0.5)' }, ticks: { color: '#64748b', font: { size: 9 } } }
+                    }
+                }
+            });
+        }
+
+        function calculateShiftMetrics(data) {
+            let tA = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+            let tB = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+            let tC = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+
+            if (data && data.length > 0) {
+                data.forEach(item => {
+                    if (!item.hora) return;
+                    const hour = parseInt(item.hora.substring(0,2), 10);
+                    const temp = item.temp;
+                    let shiftTarget = null;
+
+                    if (hour >= 6 && hour <= 13) {
+                        shiftTarget = tA;
+                    } else if (hour >= 14 && hour <= 21) {
+                        shiftTarget = tB;
+                    } else {
+                        shiftTarget = tC;
+                    }
+
+                    if (shiftTarget) {
+                        shiftTarget.sum += temp;
+                        shiftTarget.count++;
+                        if (temp < shiftTarget.min) shiftTarget.min = temp;
+                        if (temp > shiftTarget.max) shiftTarget.max = temp;
+                    }
+                });
+            }
+
+            const renderShift = (idPrefix, shiftObj) => {
+                const avgEl = document.getElementById(`${idPrefix}_Avg`);
+                const minEl = document.getElementById(`${idPrefix}_Min`);
+                const maxEl = document.getElementById(`${idPrefix}_Max`);
+
+                if (shiftObj.count === 0) {
+                    avgEl.innerText = "--"; minEl.innerText = "--"; maxEl.innerText = "--";
+                    return;
+                }
+                
+                avgEl.innerText = `${(shiftObj.sum / shiftObj.count).toFixed(1)}°C`;
+                minEl.innerText = `${shiftObj.min.toFixed(1)}°C`;
+                maxEl.innerText = `${shiftObj.max.toFixed(1)}°C`;
+            };
+
+            renderShift('shiftA', tA);
+            renderShift('shiftB', tB);
+            renderShift('shiftC', tC);
+        }
+
+        function updateTable(data) {
+            const tbody = document.getElementById('dataTableBody');
+            document.getElementById('tableCount').innerText = `${data ? data.length : 0} registros`;
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) return;
+
+            data.slice(0, 100).forEach(item => {
+                let statusBadge = '';
+                if(item.temp < 7.0) {
+                    statusBadge = '<span class="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 border border-emerald-500/10 rounded-md text-[9px] font-semibold tracking-wider uppercase">Ideal</span>';
+                } else if(item.temp > 10.0) {
+                    statusBadge = '<span class="text-rose-400 bg-rose-500/10 px-2 py-0.5 border border-rose-500/10 rounded-md text-[9px] font-semibold tracking-wider uppercase">Atenção</span>';
+                } else {
+                    statusBadge = '<span class="text-slate-400 bg-slate-800/60 px-2 py-0.5 border border-slate-700/30 rounded-md text-[9px] tracking-wider uppercase">Intermed.</span>';
+                }
+
+                const row = `
+                    <tr class="odd:bg-slate-900/10 even:bg-slate-900/40 hover:bg-slate-800/40 transition-colors">
+                        <td class="px-4 py-1.5 font-medium text-slate-200 font-mono">${formatDate(item.data)}</td>
+                        <td class="px-4 py-1.5 text-slate-400 font-mono">${item.hora ? item.hora.substring(0,5) : '--:--'}</td>
+                        <td class="px-4 py-1.5 font-bold text-slate-200">${item.temp.toFixed(1)}℃</td>
+                        <td class="px-4 py-1.5">${statusBadge}</td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        function generateAnalysis(data, selectedMonth, selectedWeek, selectedDate) {
+            const container = document.getElementById('analysisText');
+            if(!data || data.length === 0) {
+                container.innerHTML = `<p class="text-slate-500">Sem registros para análise.</p>`;
+                return;
+            }
+
+            let escopoTexto = "";
+            if (selectedMonth === 'all_months') {
+                escopoTexto = "Todos os Meses (Visão Anual)";
+            } else if (selectedDate !== 'all_filter') {
+                escopoTexto = `Dia ${formatDate(selectedDate)}`;
+            } else if (selectedWeek !== 'all_month') {
+                const weekSelect = document.getElementById('weekFilter');
+                escopoTexto = `${weekSelect.options[weekSelect.selectedIndex] ? weekSelect.options[weekSelect.selectedIndex].text : 'Semana'} (${monthNames[selectedMonth.split('-')[1]] || selectedMonth})`;
+            } else {
+                escopoTexto = `Mês de ${monthNames[selectedMonth.split('-')[1]] || selectedMonth}`;
+            }
+
+            let totalSum = 0; let countIdeal = 0; let countAtencao = 0;
+            data.forEach(i => {
+                if(i.temp < 7.0) countIdeal++;
+                if(i.temp > 10.0) countAtencao++;
+                totalSum += i.temp;
+            });
+            const totalAvg = (totalSum / data.length).toFixed(1);
+
+            container.innerHTML = `
+                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/40 space-y-1">
+                    <p class="text-slate-400 font-semibold text-[10px] uppercase tracking-wider">Escopo Analisado</p>
+                    <p class="text-sm font-bold text-blue-400"><i class="fa-solid fa-chart-pie mr-1.5"></i> ${escopoTexto}</p>
+                </div>
+                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/40">
+                    <p><i class="fa-solid fa-calculator text-indigo-400 mr-1.5"></i> Média Geral calculada em <strong class="text-white">${totalAvg}°C</strong> para os <strong>${data.length} registros</strong> avaliados.</p>
+                </div>
+                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/40">
+                    <p><i class="fa-solid fa-shield-halved text-emerald-400 mr-1.5"></i> Estabilidade Operacional: O sistema operou por <strong class="text-emerald-400">${countIdeal}h</strong> dentro da meta ideal (&lt; 7°C).</p>
+                </div>
+                <div class="bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/40">
+                    <p><i class="fa-solid fa-triangle-exclamation text-amber-400 mr-1.5"></i> Desvios Críticos: Registradas <strong class="text-amber-400">${countAtencao}h</strong> em estado de atenção (&gt; 10°C).</p>
+                </div>
+            `;
+        }
+
+        function formatDate(dateString) {
+            if(!dateString) return "--/--";
+            const parts = dateString.split('-');
+            if(parts.length < 3) return dateString;
+            return `${parts[2]}/${parts[1]}`;
+        }
+
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => { applyFilters(); }, 250);
+        });
+    </script>
+</body>
+</html>
